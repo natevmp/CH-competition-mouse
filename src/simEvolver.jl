@@ -16,19 +16,12 @@ Create the `DataFrame` `simArgs`. Each row contains the arguments pertaining to 
 `s_vid`: `vector` with elements the innate fitness of each clone, ordered by clone id. \\
 """
 function prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs::Int; growthPhase::Bool=false) where {U,S<:Real}
-    # T = params[:T]
-    # μ = params[:μ]
-    @unpack T, μ, N = params
-    tMature = if haskey(params, :tMature)
-            params[:tMature]
-        else
-            0.
-    end
+    (; T, μ, N) = params
+    tMature = params.tMature
 
-    simArgs = DataFrame()
-    simArgs.k = Vector{Int64}(undef, runs)
-    simArgs.t₀_vid = Vector{Vector{Float64}}(undef, runs)
-    for sid in 1:runs
+    k_sid = Vector{Int64}(undef, runs)
+    t₀_vid_Sid = Vector{Vector{Float64}}(undef, runs)
+    for sid in eachindex(k_sid)
         kGrowthPhase, t₀_vidPB = 
             if growthPhase
                 growthPhaseArrivals((N=N, μ=μ, tMature=tMature))
@@ -37,35 +30,38 @@ function prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Ve
         end
         kConstPhase = rand( Poisson(μ*(T-tMature)) )
         t₀_vidConstPhase = rand(Uniform(tMature,T), kConstPhase) |> sort!
-        simArgs.k[sid] = kGrowthPhase + kConstPhase
-        simArgs.t₀_vid[sid] = vcat(t₀_vidPB, t₀_vidConstPhase)
+        k_sid[sid] = kGrowthPhase + kConstPhase
+        t₀_vid_Sid[sid] = vcat(t₀_vidPB, t₀_vidConstPhase)
     end
-    simArgs._trackerID = [Vector{Int}(undef,length(_trackerVariant)) for j in 1:runs]
-    for row in eachrow(simArgs)
-        for ts in _trackerVariant # `ts` is tuple (t0, s)
-            row.k += 1
-            push!(row.t₀_vid, ts[1])
+    _trackerID_Sid = [Vector{Int}(undef, length(_trackerVariant)) for _ in eachindex(k_sid)]
+    for sid in eachindex(k_sid)
+        for ts in _trackerVariant
+            k_sid[sid] += 1
+            push!(t₀_vid_Sid[sid], ts[1])
         end
-        sort!(row.t₀_vid)
+        sort!(t₀_vid_Sid[sid])
         for (i,ts) in enumerate(_trackerVariant)
-            row._trackerID[i] = findfirst(row.t₀_vid .== ts[1])
+            _trackerID_Sid[sid][i] = findfirst(t₀_vid_Sid[sid] .== ts[1])
         end
     end
-    simArgs.s_vid = (k->selectionParamModel(selectionModel, k)).(simArgs[!,:k])
-    if haskey(params, :sMax)
-       for s_vid in simArgs.s_vid
-           maxS_vid = findall(s_vid.>params[:sMax])
-           s_vid[maxS_vid] .= params[:sMax]
+    s_vid_Sid = (k->selectionParamModel(selectionModel, k)).(k_sid)
+    if isfinite(params.sMax)
+       for s_vid in s_vid_Sid
+           maxS_vid = findall(s_vid.>params.sMax)
+           s_vid[maxS_vid] .= params.sMax
        end
     end
-    simArgs.init_vid = falses.(simArgs[!,:k])
-    simArgs.x₀_vid = zeros.(simArgs[!,:k])
-    simArgs.parentId_vid = zeros.(Int64, simArgs[!,:k])
+    init_vid_Sid = falses.(k_sid)
+    x₀_vid_Sid = zeros.(k_sid)
+    parentId_vid_Sid = zeros.(Int64, k_sid)
 
-    length(_trackerVariant)<1 && (return simArgs)
-    eltype(_trackerVariant)==Tuple{Real} && (return simArgs)
-    for rowArgs in eachrow(simArgs)
-        rowArgs.s_vid[rowArgs._trackerID] .= [ts[2] for ts in _trackerVariant]
+    simArgs = SimArgs(k_sid, t₀_vid_Sid, _trackerID_Sid, s_vid_Sid, init_vid_Sid, x₀_vid_Sid, parentId_vid_Sid)
+
+    if length(_trackerVariant)<1 return simArgs end
+    if eltype(_trackerVariant)==Tuple{Real} return simArgs end
+    # place tracked variants
+    for sid in eachindex(simArgs.s_vid_Sid)
+        simArgs.s_vid_Sid[sid][simArgs._trackerID_Sid[sid]] .= [ts[2] for ts in _trackerVariant]
     end
     return simArgs
 end
@@ -87,7 +83,7 @@ function drawInhomogeneousPoisson(λ::Function, λHom::Real, tWindow::Tuple{<:Re
 end
 
 function growthPhaseArrivals(params)
-    @unpack μ, N, tMature = params
+    (; μ, N, tMature) = params
     TPreBirth = 9/12
     nPop(t) = exp(log(N)/(TPreBirth+tMature) * t)
     λ(t) = μ/N * nPop(t)
@@ -205,8 +201,8 @@ function newCloneSize(model::FixedSizeGrowthModel, N)
 end
 
 function evolveGrowthPhase!(
-    simArgs::DataFrame,
-    params::Dict,
+    simArgs::SimArgs,
+    params,
     selectionModel::SelectionModel;
     runs::Int,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
@@ -214,29 +210,19 @@ function evolveGrowthPhase!(
     algorithm::Int=1,
     ) where {U,S<:Real}
 
-    @unpack N, s, μ = params
-    α = if haskey(params, :α)
-            params[:α]
-        else
-            1/params[:τ]
-    end
-    tMature = if haskey(params, :tMature)
-            params[:tMature]
-        else
-            0.
-    end
+    (; N, s, μ, α, tMature) = params
     T = 9/12 # full time is from conception until birth
 
     growthModel = UnconstrainedGrowthModel(selectionModel)
     f!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = 
-        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=(haskey(params, :sMax) ? params[:sMax] : Inf))
+        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=params.sMax)
     g!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = begin
         noDiffusion ? 0 : diffusion(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t)
     end
 
     # get allocation-free minimum
     t0Min = -T + 0.1
-    for t_vid in simArgs[!,:t₀_vid]
+    for t_vid in simArgs.t₀_vid_Sid
         if length(t_vid)==0 continue end # ingnore empty arrays
         if t_vid[1]<t0Min
             t0Min = t_vid[1]
@@ -260,11 +246,11 @@ function evolveGrowthPhase!(
     callBackAddClone = DiscreteCallback(condition, affect!; save_positions=(false,false))
     callbacks = CallbackSet(callBackAddStops, callBackAddClone)
 
-    prob = SDEProblem(f!, g!, simArgs[1,:x₀_vid], (-T, tMature), [simArgs[1,:t₀_vid], simArgs[1,:init_vid], α, simArgs[1,:s_vid], N, simArgs[1,:parentId_vid]])
+    prob = SDEProblem(f!, g!, simArgs.x₀_vid_Sid[1], (-T, tMature), (simArgs.t₀_vid_Sid[1], simArgs.init_vid_Sid[1], α, simArgs.s_vid_Sid[1], N, simArgs.parentId_vid_Sid[1]))
     solver = ALGS[algorithm]
     function probFunc(prob, ctx)
         i = ctx.sim_id
-        remake(prob, u0=simArgs[i,:x₀_vid], p=[simArgs[i,:t₀_vid], simArgs[i,:init_vid], α, simArgs[i, :s_vid], N, simArgs[i,:parentId_vid]])
+        remake(prob, u0=simArgs.x₀_vid_Sid[i], p=(simArgs.t₀_vid_Sid[i], simArgs.init_vid_Sid[i], α, simArgs.s_vid_Sid[i], N, simArgs.parentId_vid_Sid[i]))
     end
     ensembleProb = EnsembleProblem(prob, prob_func=probFunc)
     solEns = solve(ensembleProb, solver(), EnsembleThreads(); callback=callbacks, tstops=[t0Min,], saveat=[tMature,], trajectories=runs)
@@ -272,8 +258,34 @@ function evolveGrowthPhase!(
     for (sid, sol) in enumerate(solEns.u)
         x0_vid_Sid[sid] = sol.u[end] ./ (sum(sol.u[end]) + N)
     end
-    simArgs.x₀_vid .= x0_vid_Sid
+    simArgs.x₀_vid_Sid = x0_vid_Sid
     return solEns
+end
+
+function selectModel(sType::String, s, σ, q, growthModel::String)
+    selection =
+        if sType=="fixed"
+            FixedSelectionModel(s, q)
+        elseif sType=="exponential"
+            ExponentialSelectionModel(s, q)
+        elseif sType=="gaussian"
+            GaussianSelectionModel(s, σ, q)
+        elseif sType=="gamma"
+            GammaSelectionModel(s, σ, q)
+        elseif sType=="free"
+            FreeFixedModel(s, q)
+        else
+            error("Error: selection model undefined.")
+        end
+    growth =
+        if growthModel=="fixed size"
+            FixedSizeGrowthModel(selection)
+        elseif growthModel=="unconstrained"
+            UnconstrainedGrowthModel(selection)
+        else
+            error("Error: growth model undefined.")
+        end
+    return selection, growth
 end
 
 """
@@ -282,43 +294,21 @@ end
 `_trackerVariant` is a vector containing clones to be tracked. The elements are either the birth times, or a tuple containing both birth time and fitness of the form `(t0, s)`.
 """
 function evolvePopSim(
-        params::Dict;
+        params;
         runs::Int=1,
         _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
         noDiffusion::Bool=false,
         algorithm::Int=1,
         growthPhase::Bool=false,
     ) where {U,S<:Real}
-    selectionModel =
-        if params[:sType]=="fixed"
-            FixedSelectionModel(params[:s], params[:q])
-        elseif params[:sType]=="exponential"
-            ExponentialSelectionModel(params[:s], params[:q])
-        elseif params[:sType]=="gaussian"
-            GaussianSelectionModel(params[:s], params[:σ], params[:q])
-        elseif params[:sType]=="gamma"
-            GammaSelectionModel(params[:s], params[:σ], params[:q])
-        elseif params[:sType]=="free"
-            FreeFixedModel(params[:s], params[:q])
-        else
-            error("Error: selection model undefined.")
-    end
-    if !haskey(params, :growthModel)
-        params[:growthModel] = "fixed size"
-    end
-    growthModel = 
-        if params[:growthModel]=="fixed size"
-            model = FixedSizeGrowthModel(selectionModel)
-        elseif params[:growthModel]=="unconstrained"
-            model = UnconstrainedGrowthModel(selectionModel)
-        else
-            error("Error: growth model undefined.")
-    end
+    params = complete(params)
+    (; sType, s, σ, q, growthModel) = params
+    selectionModel, growthModel = selectModel(sType, s, σ, q, growthModel)
     evolvePopSim(params, growthModel; runs, _trackerVariant, noDiffusion, algorithm, growthPhase)
 end
 
 function evolvePopSim(
-    params::Dict,
+    params,
     growthModel::GrowthModel; 
     runs::Int=1,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
@@ -327,27 +317,16 @@ function evolvePopSim(
     growthPhase::Bool=false,
     ) where {U,S<:Real}
     
-    @unpack N, s, T, μ = params
-    α = if haskey(params, :α)
-            params[:α]
-        else
-            1/params[:τ]
-    end
-    tMature = if haskey(params, :tMature)
-            params[:tMature]
-        else
-            0.
-    end
+    (; N, s, T, μ, α, tMature) = params
 
     f!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = 
-        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=(haskey(params, :sMax) ? params[:sMax] : Inf))
+        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=params.sMax)
     g!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = begin
         noDiffusion ? 0 : diffusion(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t)
     end
 
     simArgs = prepareSims(params, growthModel.selection, _trackerVariant, runs; growthPhase)
 
-    # evolveGrowthPhase! evolves up to `tMature`, and sets the result as x0_vid in simArgs
     if growthPhase
         evolveGrowthPhase!(simArgs, params, growthModel.selection; runs, _trackerVariant, noDiffusion, algorithm)
     end
@@ -355,7 +334,7 @@ function evolvePopSim(
     # Get first post-growth variant arrival time from all sims
     # (allocation-free method)
     t0Min = tMature + 1.
-    for t_vid in simArgs[!,:t₀_vid]
+    for t_vid in simArgs.t₀_vid_Sid
         if length(t_vid)==0 continue end # ingnore empty arrays (no variants occur)
         ind = findfirst(t_vid.>tMature) # ignore developmental arrival times
         if t_vid[ind]<t0Min
@@ -364,7 +343,6 @@ function evolvePopSim(
     end
     condt0(u,t,integrator) = t==t0Min
     function addStops!(integrator)
-        # println("adding stops")
         for t0 in integrator.p[1]
             if t0<tMature continue end # skip prenatal stops
             add_tstop!(integrator, t0)
@@ -382,17 +360,17 @@ function evolvePopSim(
     prob = SDEProblem(
         f!,
         g!,
-        simArgs[1,:x₀_vid],
+        simArgs.x₀_vid_Sid[1],
         (tMature, T),
-        [simArgs[1,:t₀_vid], simArgs[1,:init_vid], α, simArgs[1,:s_vid], N, simArgs[1,:parentId_vid]]
+        (simArgs.t₀_vid_Sid[1], simArgs.init_vid_Sid[1], α, simArgs.s_vid_Sid[1], N, simArgs.parentId_vid_Sid[1])
     )
     solver = ALGS[algorithm]
     function probFunc(prob, ctx)
         i = ctx.sim_id
-        remake(prob, u0=simArgs[i,:x₀_vid], p=[simArgs[i,:t₀_vid], simArgs[i,:init_vid], α, simArgs[i, :s_vid], N, simArgs[i,:parentId_vid]])
+        remake(prob, u0=simArgs.x₀_vid_Sid[i], p=(simArgs.t₀_vid_Sid[i], simArgs.init_vid_Sid[i], α, simArgs.s_vid_Sid[i], N, simArgs.parentId_vid_Sid[i]))
     end
     ensembleProb = EnsembleProblem(prob, prob_func=probFunc)
     _t = range(Int(ceil(tMature)), T)
     solEns = solve(ensembleProb, solver(), EnsembleThreads(); callback=callbacks, tstops=[t0Min,], saveat=_t, trajectories=runs)
-    return solEns, simArgs
+    return solEns, DataFrame(simArgs)
 end

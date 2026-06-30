@@ -500,7 +500,7 @@ end
 
 function runModelSimFixedFitness(paramsABC, ctrlParams)
     # fix `s` based on value of τ
-    ctrlParams[:params][:s] = ctrlParams[:sFixed] * paramsABC[:τ]
+    ctrlParams[:params] = merge(ctrlParams[:params], (s=ctrlParams[:sFixed] * paramsABC[:τ],))
     runModelSim(paramsABC, ctrlParams)
 end
 
@@ -514,19 +514,18 @@ end
 Perform a run of the model simulations to obtain a single particle with parameter set `paramsABC`.
 """
 function runModelSim(paramsABC, ctrlParams; debug::Bool=false)
-    modelParams = deepcopy(ctrlParams[:params])
+    modelParams = ctrlParams[:params]
     for (pName, pVal) in pairs(paramsABC)
-        ∈(pName, ctrlParams[:fixPar]) && continue
-        modelParams[pName] = pVal
+        pName ∈ ctrlParams[:fixPar] && continue
+        modelParams = merge(modelParams, (; pName => pVal))
     end
 
     if ctrlParams[:normalizedFitnessDist]
-        modelParams[:s] = modelParams[:s]*modelParams[:τ]
-        modelParams[:σ] = modelParams[:σ]*modelParams[:τ]
+        modelParams = merge(modelParams, (s=modelParams.s * modelParams.τ, σ=modelParams.σ * modelParams.τ))
     end
 
     # run model sims
-    selection = GammaSelectionModel(modelParams[:s], modelParams[:σ], modelParams[:q])
+    selection = GammaSelectionModel(modelParams.s, modelParams.σ, modelParams.q)
     growthModel = FixedSizeGrowthModel(selection)
     solEns, simArgs = evolvePopSim(modelParams, growthModel; runs=ctrlParams[:simRuns], noDiffusion=false)
     tMeasure = (ctrlParams[:tBounds][1]+ctrlParams[:tBounds][2])/2
@@ -538,7 +537,7 @@ function runModelSim(paramsABC, ctrlParams; debug::Bool=false)
         if haskey(ctrlParams, :sortBias)
             ctrlParams[:sortBias]
         else
-            modelParams[:sortBias]
+            modelParams.sortBias
         end
     nVars_f = sizeDistSims(
         tMeasure,

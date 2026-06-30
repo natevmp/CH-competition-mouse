@@ -6,16 +6,16 @@ using DataFrames
 import DifferentialEquations as DE
 println("=== smoke test: evolvePopSim ===")
 
-params = Dict(
-    :sType => "gamma",
-    :s => 0.1,
-    :σ => 0.02,
-    :q => 0.5,
-    :N => 1000,
-    :T => 100,
-    :μ => 2,
-    :τ => 1.,
-    :growthModel => "fixed size",
+params = (;
+    sType="gamma",
+    s=0.1,
+    σ=0.02,
+    q=0.5,
+    N=1000,
+    T=100,
+    μ=2,
+    τ=1.,
+    growthModel="fixed size",
 )
 
 solEns, simArgs = evolvePopSim(params; runs=10, algorithm=1);
@@ -31,13 +31,13 @@ println("PASSED: evolvePopSim returns correct types and shapes")
 
 println("\n=== smoke test: evolvePopSim with growthPhase ===")
 
-solEns2, simArgs2 = evolvePopSim(params; runs=1, growthPhase=true, algorithm=1)
+solEns2, simArgs2 = evolvePopSim(params; runs=5, growthPhase=true, algorithm=1)
 
 println("nSims: ", length(solEns2.u))
 println("simArgs rows: ", nrow(simArgs2))
 
-@assert length(solEns2.u) == 1
-@assert nrow(simArgs2) == 1
+@assert length(solEns2.u) == 5
+@assert nrow(simArgs2) == 5
 
 println("PASSED: evolvePopSim with growthPhase")
 
