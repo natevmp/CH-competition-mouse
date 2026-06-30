@@ -4,18 +4,37 @@ Julia research codebase for simulating clonal hematopoiesis (CH) competition in 
 
 ## Entry point
 
-- module `CompetitiveSelection` in `src/competitiveSelection.jl`
-- Load: `include("src/competitiveSelection.jl")` then `using .CompetitiveSelection`
+Load everything:
+```julia
+include("src/competitiveSelection.jl")
+using .CompetitiveSelection
+```
+
+Simulation-only (standalone):
+```julia
+include("src/competitionSDE.jl")
+using .CompetitionSDE
+```
 
 ## Module layout
 
-| File | Module/scope | Purpose |
-|---|---|---|
-| `competitiveSelection.jl` | `CompetitiveSelection` | Main entrypoint, growth/selection model types |
-| `simEvolver.jl` | (included) | Stochastic Moran/birth-death simulation |
-| `scientist.jl` | (included) | Analysis: binning, sampling, ABC distance |
+Three modules in a two-level hierarchy:
 
-All functions in `simEvolver.jl` and `scientist.jl` land directly in `CompetitiveSelection` (they are `include()`d, not separate modules).
+| Module | File | Purpose |
+|---|---|---|
+| `CompetitiveSelection` | `competitiveSelection.jl` | Top-level convenience, re-exports both submodules |
+| ↳ `CompetitionSDE` | `competitionSDE.jl` | Simulation core: types, SDE engine, `evolvePopSim` |
+| ↳ `Scientist` | `Scientist.jl` | Analysis: binning, trajectory sampling, ABC |
+
+`CompetitionSDE` is self-contained (standalone). `Scientist` depends on `CompetitionSDE` via `using ..CompetitionSDE`.
+
+## Source files
+
+| File | Included by | Purpose |
+|---|---|---|
+| `simEvolver.jl` | `competitionSDE.jl` | Stochastic Moran/birth-death simulation functions |
+| `competitionSDE.jl` | `competitiveSelection.jl` | CompetitionSDE module definition + types |
+| `Scientist.jl` | `competitiveSelection.jl` | Scientist module definition with analysis code |
 
 ## Setup
 
@@ -35,6 +54,6 @@ This loads the module, runs a short `evolvePopSim` simulation, and asserts basic
 ## Important notes
 
 - All source files are in `src/` — not a formal Julia package (no UUID in `Project.toml`), but project dependencies are managed via `Project.toml`.
-- Single exported function: `evolvePopSim` (declared at `competitiveSelection.jl:15`).
+- Key exported function: `evolvePopSim` (from `CompetitionSDE`).
 - Follow existing Julia style: 4-space indent, docstrings above functions, spaces around operators.
 - Array indexing follows the underscore protocol (see global `AGENTS.md` for the naming convention).

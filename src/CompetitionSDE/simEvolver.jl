@@ -1,8 +1,4 @@
 
-
-
-const ALGS = (LambaEM, SOSRI2, SOSRA2, SRA3, ImplicitEulerHeun, SKenCarp)
-
 """
     prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs) where {U,S<:Real}
 

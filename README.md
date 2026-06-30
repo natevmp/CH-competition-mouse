@@ -9,6 +9,13 @@ include("src/competitiveSelection.jl")
 using .CompetitiveSelection
 ```
 
+For simulation-only work (minimal dependencies):
+
+```julia
+include("src/competitionSDE.jl")
+using .CompetitionSDE
+```
+
 ## Dependencies
 
 Dependencies are managed via `Project.toml`. After cloning:
@@ -19,11 +26,17 @@ julia -e 'import Pkg; Pkg.instantiate()'
 
 ## Module structure
 
-| File | Scope | Purpose |
+Three modules in a two-level hierarchy:
+
+| Module | File | Purpose |
 |---|---|---|
-| `competitiveSelection.jl` | `CompetitiveSelection` | Entrypoint, growth/selection model types, `SimArgs` |
-| `simEvolver.jl` | (included) | Stochastic Moran / birth-death simulation |
-| `scientist.jl` | (included) | Analysis: binning, sampling, ABC distance metrics |
+| `CompetitiveSelection` | `competitiveSelection.jl` | Top-level convenience — re-exports both submodules |
+| ↳ `CompetitionSDE` | `competitionSDE.jl` | Simulation core: types, SDE engine, `evolvePopSim` |
+| ↳ `Scientist` | `Scientist.jl` | Analysis: binning, trajectory sampling, ABC distance metrics |
+
+`CompetitionSDE` is self-contained and can be used standalone. `Scientist` depends on `CompetitionSDE` and is loaded through the parent module.
+
+Simulation code lives in `simEvolver.jl` (included by `CompetitionSDE`).
 
 ## Attribution
 
