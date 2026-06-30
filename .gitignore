@@ -1,0 +1,6 @@
+*.jl.cov
+*.jl.*.cov
+*.jld2
+/Manifest.toml
+.DS_Store
+debug.jld2
