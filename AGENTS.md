@@ -34,7 +34,7 @@ This loads the module, runs a short `evolvePopSim` simulation, and asserts basic
 
 ## Important notes
 
-- All source files are in `src/` — no package structure, no `Project.toml`.
+- All source files are in `src/` — not a formal Julia package (no UUID in `Project.toml`), but project dependencies are managed via `Project.toml`.
 - Single exported function: `evolvePopSim` (declared at `competitiveSelection.jl:15`).
 - Follow existing Julia style: 4-space indent, docstrings above functions, spaces around operators.
 - Array indexing follows the underscore protocol (see global `AGENTS.md` for the naming convention).
