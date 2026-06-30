@@ -19,12 +19,9 @@ All functions in `simEvolver.jl` and `scientist.jl` land directly in `Competitiv
 
 ## Setup
 
-No `Project.toml`. Install dependencies via Julia Pkg:
-
-```julia
-using Pkg
-Pkg.add(["DifferentialEquations", "DataFrames", "StatsBase", "Distributions",
-         "Distances", "Interpolations", "Parameters", "JLD2", "LinearAlgebra"])
+Project environment managed via `Project.toml`. After cloning, instantiate:
+```bash
+julia -e 'import Pkg; Pkg.instantiate()'
 ```
 
 ## Testing / verification

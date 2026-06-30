@@ -4,6 +4,7 @@ using DataFrames
 using Distances
 using Statistics, StatsBase, LinearAlgebra
 using DifferentialEquations
+using StochasticDiffEq
 using Interpolations
 using Distributions
 using Random

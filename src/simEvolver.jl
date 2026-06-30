@@ -1,5 +1,8 @@
 
 
+
+const ALGS = (LambaEM, SOSRI2, SOSRA2, SRA3, ImplicitEulerHeun, SKenCarp)
+
 """
     prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs) where {U,S<:Real}
 
@@ -258,15 +261,15 @@ function evolveGrowthPhase!(
     callbacks = CallbackSet(callBackAddStops, callBackAddClone)
 
     prob = SDEProblem(f!, g!, simArgs[1,:x₀_vid], (-T, tMature), [simArgs[1,:t₀_vid], simArgs[1,:init_vid], α, simArgs[1,:s_vid], N, simArgs[1,:parentId_vid]])
-    algs = (LambaEM, SOSRI2, SOSRA2, SRA3, ImplicitEulerHeun, SKenCarp)
-    solver = algs[algorithm]
-    function probFunc(prob, i, repeat)
+    solver = ALGS[algorithm]
+    function probFunc(prob, ctx)
+        i = ctx.sim_id
         remake(prob, u0=simArgs[i,:x₀_vid], p=[simArgs[i,:t₀_vid], simArgs[i,:init_vid], α, simArgs[i, :s_vid], N, simArgs[i,:parentId_vid]])
     end
     ensembleProb = EnsembleProblem(prob, prob_func=probFunc)
     solEns = solve(ensembleProb, solver(), EnsembleThreads(); callback=callbacks, tstops=[t0Min,], saveat=[tMature,], trajectories=runs)
     x0_vid_Sid = Vector{Vector{Float64}}(undef, runs)
-    for (sid, sol) in enumerate(solEns)
+    for (sid, sol) in enumerate(solEns.u)
         x0_vid_Sid[sid] = sol.u[end] ./ (sum(sol.u[end]) + N)
     end
     simArgs.x₀_vid .= x0_vid_Sid
@@ -383,15 +386,9 @@ function evolvePopSim(
         (tMature, T),
         [simArgs[1,:t₀_vid], simArgs[1,:init_vid], α, simArgs[1,:s_vid], N, simArgs[1,:parentId_vid]]
     )
-    algs = (LambaEM, SOSRI2, SOSRA2, SRA3, ImplicitEulerHeun, SKenCarp)
-    # solver = SOSRI2
-    # solver = SOSRA2
-    # solver = SRA3
-    # solver = ImplicitEulerHeun
-    # solver = LambaEM    #fastest
-    # solver = SKenCarp #fails
-    solver = algs[algorithm]
-    function probFunc(prob, i, repeat)
+    solver = ALGS[algorithm]
+    function probFunc(prob, ctx)
+        i = ctx.sim_id
         remake(prob, u0=simArgs[i,:x₀_vid], p=[simArgs[i,:t₀_vid], simArgs[i,:init_vid], α, simArgs[i, :s_vid], N, simArgs[i,:parentId_vid]])
     end
     ensembleProb = EnsembleProblem(prob, prob_func=probFunc)
