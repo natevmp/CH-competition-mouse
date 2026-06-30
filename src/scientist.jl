@@ -284,10 +284,6 @@ function Base.rand(rng::AbstractRNG, d::StepUniform)
     return sample
 end
 
-
-
-
-
 function averageTrackedVariant(solEns, simArgs)
     sizeTrackedvariant_sid_t = Array{Float64}(undef, length(solEns), length(solEns[1].t))
     for (sid, sol) in enumerate(solEns)
