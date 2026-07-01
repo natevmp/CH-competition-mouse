@@ -40,7 +40,7 @@ function prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Ve
             _trackerID_Sid[sid][i] = findfirst(t₀_vid_Sid[sid] .== ts[1])
         end
     end
-    s_vid_Sid = (k->selectionParamModel(selectionModel, k)).(k_sid)
+    s_vid_Sid = [drawSelectionCoefficients(selectionModel, k) for k in k_sid]
     if isfinite(params.sMax)
        for s_vid in s_vid_Sid
            maxS_vid = findall(s_vid.>params.sMax)
@@ -89,24 +89,24 @@ function growthPhaseArrivals(params)
     return (k=length(tPos_vid), t_vid=t_vid)
 end
 
-function selectionParamModel(selectionModel::FixedSelectionModel, k::Int)
-    fill(selectionModel.s, k)
+function drawSelectionCoefficients(selectionModel::FixedSelectionModel, k::Int)
+    fill(selectionModel.η, k)
 end
 
-function selectionParamModel(selectionModel::FreeFixedModel, k::Int)
-    fill(selectionModel.s, k)
+function drawSelectionCoefficients(selectionModel::FreeFixedModel, k::Int)
+    fill(selectionModel.η, k)
 end
 
-function selectionParamModel(selectionModel::GaussianSelectionModel, k::Int)
-    rand(Normal(selectionModel.s, selectionModel.σ), k)
+function drawSelectionCoefficients(selectionModel::GaussianSelectionModel, k::Int)
+    rand(Normal(selectionModel.η, selectionModel.σ), k)
 end
 
-function selectionParamModel(selectionModel::ExponentialSelectionModel, k::Int)
-    rand(Exponential(selectionModel.s), k)
+function drawSelectionCoefficients(selectionModel::ExponentialSelectionModel, k::Int)
+    rand(Exponential(selectionModel.η), k)
 end
 
-function selectionParamModel(selectionModel::GammaSelectionModel, k::Int)
-    rand(Gamma(selectionModel.s^2/selectionModel.σ^2 , selectionModel.σ^2/selectionModel.s), k)
+function drawSelectionCoefficients(selectionModel::GammaSelectionModel, k::Int)
+    rand(Gamma(selectionModel.η^2/selectionModel.σ^2 , selectionModel.σ^2/selectionModel.η), k)
 end
 
 function fitnessDoubleHit(sChild, sParent)
@@ -136,7 +136,6 @@ function drift(model::FixedSizeGrowthModel, dx_vid, x_vid, (t0_vid, init_vid, α
         t < t0_vid[vid] && break
         sX += x*s_vid[vid]
     end
-    # @views sX = sum(x_vid .* s_vid) # allocating sum
     for (i, x) in enumerate(x_vid)
         t < t0_vid[i] && break # skip variant if not yet initiated
         !init_vid[i] && initiateVariant!(i, init_vid, s_vid, x_vid, parentId_vid, model.selection.q; sMax=sMax) # initiate variant if new
@@ -206,7 +205,7 @@ function evolveGrowthPhase!(
     algorithm::Symbol=:LambaEM,
     ) where {U,S<:Real}
 
-    (; N, s, μ, α, tMature, sMax) = params
+    (; N, η, μ, α, tMature, sMax) = params
     T = 9/12 # full time is from conception until birth
 
     growthModel = UnconstrainedGrowthModel(selectionModel)
@@ -258,18 +257,18 @@ function evolveGrowthPhase!(
     return solEns
 end
 
-function selectModel(sType::String, s, σ, q, growthModel::String)
+function selectModel(sType::String, η, σ, q, growthModel::String)
     selection =
         if sType=="fixed"
-            FixedSelectionModel(s, q)
+            FixedSelectionModel(η, q)
         elseif sType=="exponential"
-            ExponentialSelectionModel(s, q)
+            ExponentialSelectionModel(η, q)
         elseif sType=="gaussian"
-            GaussianSelectionModel(s, σ, q)
+            GaussianSelectionModel(η, σ, q)
         elseif sType=="gamma"
-            GammaSelectionModel(s, σ, q)
+            GammaSelectionModel(η, σ, q)
         elseif sType=="free"
-            FreeFixedModel(s, q)
+            FreeFixedModel(η, q)
         else
             error("Error: selection model undefined.")
         end
@@ -298,8 +297,8 @@ function evolvePopSim(
         growthPhase::Bool=false,
     ) where {U,S<:Real}
     params = complete(params)
-    (; sType, s, σ, q, growthModel) = params
-    selectionModel, growthModel = selectModel(sType, s, σ, q, growthModel)
+    (; sType, η, σ, q, growthModel) = params
+    selectionModel, growthModel = selectModel(sType, η, σ, q, growthModel)
     evolvePopSim(params, growthModel; runs, _trackerVariant, noDiffusion, algorithm, growthPhase)
 end
 
@@ -313,7 +312,7 @@ function evolvePopSim(
     growthPhase::Bool=false,
     ) where {U,S<:Real}
     
-    (; N, s, T, μ, α, tMature) = params
+    (; N, η, T, μ, α, tMature) = params
 
     f!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = 
         drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=params.sMax)

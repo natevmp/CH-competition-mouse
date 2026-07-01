@@ -503,8 +503,8 @@ function samplePatientSim(sol, S::Int, _t; f0=0)
 end
 
 function runModelSimFixedFitness(paramsABC, ctrlParams)
-    # fix `s` based on value of τ
-    ctrlParams[:params] = merge(ctrlParams[:params], (s=ctrlParams[:sFixed] * paramsABC[:τ],))
+    # fix `η` based on value of τ
+    ctrlParams[:params] = merge(ctrlParams[:params], (η=ctrlParams[:sFixed] * paramsABC[:τ],))
     runModelSim(paramsABC, ctrlParams)
 end
 
@@ -525,11 +525,11 @@ function runModelSim(paramsABC, ctrlParams; debug::Bool=false)
     end
 
     if ctrlParams[:normalizedFitnessDist]
-        modelParams = merge(modelParams, (s=modelParams.s * modelParams.τ, σ=modelParams.σ * modelParams.τ))
+        modelParams = merge(modelParams, (η=modelParams.η * modelParams.τ, σ=modelParams.σ * modelParams.τ))
     end
 
     # run model sims
-    selection = GammaSelectionModel(modelParams.s, modelParams.σ, modelParams.q)
+    selection = GammaSelectionModel(modelParams.η, modelParams.σ, modelParams.q)
     growthModel = FixedSizeGrowthModel(selection)
     solEns, simArgs = evolvePopSim(modelParams, growthModel; runs=ctrlParams[:simRuns], noDiffusion=false)
     tMeasure = (ctrlParams[:tBounds][1]+ctrlParams[:tBounds][2])/2

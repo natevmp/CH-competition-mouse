@@ -8,7 +8,7 @@ println("=== smoke test: evolvePopSim ===")
 
 params = (;
     sType="gamma",
-    s=0.1,
+    η=0.1,
     σ=0.02,
     q=0.5,
     N=1000,

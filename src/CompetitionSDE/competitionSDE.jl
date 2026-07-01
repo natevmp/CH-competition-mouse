@@ -11,29 +11,29 @@ abstract type GrowthModel end
 abstract type SelectionModel end
 
 struct GaussianSelectionModel <: SelectionModel
-    s::Float64
+    η::Float64
     σ::Float64
     q::Float64
 end
 
 struct ExponentialSelectionModel <: SelectionModel
-    s::Float64
+    η::Float64
     q::Float64
 end
 
 struct GammaSelectionModel <: SelectionModel
-    s::Float64
+    η::Float64
     σ::Float64
     q::Float64
 end
 
 struct FixedSelectionModel <: SelectionModel
-    s::Float64
+    η::Float64
     q::Float64
 end
 
 struct FreeFixedModel <: SelectionModel
-    s::Float64
+    η::Float64
     q::Float64
 end
 
