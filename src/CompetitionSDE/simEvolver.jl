@@ -1,17 +1,19 @@
 
 """
-    prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs) where {U,S<:Real}
+    prepareSims(params, selectionModel, _trackerVariant, runs; growthPhase=false) -> SimArgs
 
-Create the `DataFrame` `simArgs`. Each row contains the arguments pertaining to a single simulation. The columns denote the arguments:
+Create a [`SimArgs`](@ref) struct from simulation parameters.
+Each entry corresponds to one simulation in the ensemble.
 
-`k`: total number of variants arising \\
-`t₀_vid`: `vector` of clone arrival times ordered by clone id (coincindes with ascending arrival time order). \\
-`_trackerID`: `vector` with elements pertaining to inserted tracker variants. Each element is a `tuple` `(t0, s)` containg that variant's arrival time `t0` and innate fitness `s`. \\
-`init_vid`: `vector` of bools denoting whether a clone has arrived (relevant for internal simulation). \\
-`parentId_vid`: `vector` denoting the parent of each clone, ordered by clone id. \\
-`s_vid`: `vector` with elements the innate fitness of each clone, ordered by clone id. \\
+# Fields in the returned `SimArgs`
+- `k` — number of variants
+- `t₀_vid` — clone arrival times (ordered by clone id)
+- `_trackerID` — indices of inserted tracker variants
+- `init_vid` — booleans indicating whether each clone has arrived
+- `parentId_vid` — parent of each clone
+- `s_vid` — per-variant selection coefficients
 """
-function prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs::Int; growthPhase::Bool=false) where {U,S<:Real}
+function prepareSims(params::NamedTuple, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs::Int; growthPhase::Bool=false) where {U,S<:Real}
     (; T, μ, N) = params
     tMature = params.tMature
 
@@ -62,6 +64,12 @@ function prepareSims(params, selectionModel, _trackerVariant::Union{Vector{U},Ve
     return simArgs
 end
 
+"""
+    drawInhomogeneousPoisson(λ, λHom, tWindow) -> Vector{Float64}
+
+Draw events from a one-dimensional inhomogeneous Poisson process
+with intensity `λ(t)` using homogeneous thinning with rate `λHom`.
+"""
 function drawInhomogeneousPoisson(λ::Function, λHom::Real, tWindow::Tuple{<:Real,<:Real})
     t0 = tWindow[1]
     T = tWindow[end]
@@ -78,7 +86,14 @@ function drawInhomogeneousPoisson(λ::Function, λHom::Real, tWindow::Tuple{<:Re
     return t_vid
 end
 
-function growthPhaseArrivals(params)
+"""
+    growthPhaseArrivals(params) -> (k, t_vid)
+
+Generate variant arrival times during the prenatal growth phase.
+Population size grows exponentially from conception; arrivals follow
+an inhomogeneous Poisson process proportional to `N(t)`.
+"""
+function growthPhaseArrivals(params::NamedTuple)
     (; μ, N, tMature) = params
     TPreBirth = 9/12
     nPop(t) = exp(log(N)/(TPreBirth+tMature) * t)
@@ -89,6 +104,12 @@ function growthPhaseArrivals(params)
     return (k=length(tPos_vid), t_vid=t_vid)
 end
 
+"""
+    drawSelectionCoefficients(selectionModel, k) -> Vector{Float64}
+
+Draw `k` selection coefficients from the distribution specified by `selectionModel`.
+Dispatches on the concrete [`SelectionModel`](@ref) type.
+"""
 function drawSelectionCoefficients(selectionModel::FixedSelectionModel, k::Int)
     fill(selectionModel.η, k)
 end
@@ -109,12 +130,22 @@ function drawSelectionCoefficients(selectionModel::GammaSelectionModel, k::Int)
     rand(Gamma(selectionModel.η^2/selectionModel.σ^2 , selectionModel.σ^2/selectionModel.η), k)
 end
 
+"""
+    fitnessDoubleHit(sChild, sParent)
+
+Combined fitness of a child clone that acquires a second hit on a parent:
+`s_parent + s_child + s_parent * s_child`.
+"""
 function fitnessDoubleHit(sChild, sParent)
     sParent + sChild + sChild*sParent
 end
 
 """
-    Sets the parent clone of a new variant, and optionally performs a double hit if `q>0`.
+    initiateVariant!(childId, init_vid, s_vid, x_vid, parentId_vid, q; sMax=Inf)
+
+Randomly select a parent clone among initiated variants and link `childId` to it.
+If a double-hit event occurs (probability `q`), the child's selection coefficient
+is combined with the parent's via [`fitnessDoubleHit`](@ref).
 """
 function initiateVariant!(childId::Integer, init_vid, s_vid, x_vid, parentId_vid::Vector{Int64}, q; sMax::Real=Inf)
     pRand = rand()  # random variable ∈(0,1) to select the parent
@@ -195,9 +226,17 @@ function newCloneSize(model::FixedSizeGrowthModel, N)
     1/N
 end
 
+"""
+    evolveGrowthPhase!(simArgs, params, selectionModel; ...)
+
+Evolve the simulation through the prenatal growth phase using an
+unconstrained (exponential) growth model. Runs from conception
+(`-T`) to maturity (`tMature`) and records variant frequencies
+at birth in `simArgs.x₀_vid_Sid`.
+""" 
 function evolveGrowthPhase!(
     simArgs::SimArgs,
-    params,
+    params::NamedTuple,
     selectionModel::SelectionModel;
     runs::Int,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
@@ -257,6 +296,23 @@ function evolveGrowthPhase!(
     return solEns
 end
 
+"""
+    selectModel(sType, η, σ, q, growthModel) -> (selection, growth)
+
+Construct concrete [`SelectionModel`](@ref) and [`GrowthModel`](@ref)
+instances from keyword-style parameters.
+
+# Selection types (`sType`)
+- `"fixed"` — [`FixedSelectionModel`](@ref)
+- `"free"` — [`FreeFixedModel`](@ref)
+- `"gaussian"` — [`GaussianSelectionModel`](@ref)
+- `"exponential"` — [`ExponentialSelectionModel`](@ref)
+- `"gamma"` — [`GammaSelectionModel`](@ref)
+
+# Growth models (`growthModel`)
+- `"fixed size"` — [`FixedSizeGrowthModel`](@ref)
+- `"unconstrained"` — [`UnconstrainedGrowthModel`](@ref)
+"""
 function selectModel(sType::String, η, σ, q, growthModel::String)
     selection =
         if sType=="fixed"
@@ -284,12 +340,23 @@ function selectModel(sType::String, η, σ, q, growthModel::String)
 end
 
 """
-    evolvePopSim()
+    evolvePopSim(params; [runs, _trackerVariant, noDiffusion, algorithm, growthPhase])
 
-`_trackerVariant` is a vector containing clones to be tracked. The elements are either the birth times, or a tuple containing both birth time and fitness of the form `(t0, s)`.
+Run an ensemble of SDE simulations of clonal hematopoiesis.
+
+# Keyword arguments
+- `runs::Int=1` — number of independent simulations
+- `_trackerVariant` — vector of clone birth times `(t0,)` or `(t0, s)` tuples to track
+- `noDiffusion::Bool=false` — disable the stochastic diffusion term
+- `algorithm::Symbol=:LambaEM` — SDE solver (see [`ALGS`](@ref))
+- `growthPhase::Bool=false` — include prenatal growth phase
+
+# Returns
+- `solEns::EnsembleSolution` — ensemble of trajectory solutions
+- `simArgs::DataFrame` — per-simulation parameter table (see [`SimArgs`](@ref))
 """
 function evolvePopSim(
-        params;
+        params::NamedTuple;
         runs::Int=1,
         _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
         noDiffusion::Bool=false,
@@ -302,8 +369,14 @@ function evolvePopSim(
     evolvePopSim(params, growthModel; runs, _trackerVariant, noDiffusion, algorithm, growthPhase)
 end
 
+"""
+    evolvePopSim(params, growthModel; ...)
+
+Variant of [`evolvePopSim`](@ref) that accepts a pre-constructed
+[`GrowthModel`](@ref) directly.
+"""
 function evolvePopSim(
-    params,
+    params::NamedTuple,
     growthModel::GrowthModel; 
     runs::Int=1,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],

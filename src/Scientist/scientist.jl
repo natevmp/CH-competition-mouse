@@ -502,7 +502,7 @@ function samplePatientSim(sol, S::Int, _t; f0=0)
     samplePatientSim(sol, S_t, _t; f0)
 end
 
-function runModelSimFixedFitness(paramsABC, ctrlParams)
+function runModelSimFixedFitness(paramsABC::NamedTuple, ctrlParams)
     # fix `η` based on value of τ
     ctrlParams[:params] = merge(ctrlParams[:params], (η=ctrlParams[:sFixed] * paramsABC[:τ],))
     runModelSim(paramsABC, ctrlParams)
@@ -517,7 +517,7 @@ end
 
 Perform a run of the model simulations to obtain a single particle with parameter set `paramsABC`.
 """
-function runModelSim(paramsABC, ctrlParams; debug::Bool=false)
+function runModelSim(paramsABC::NamedTuple, ctrlParams; debug::Bool=false)
     modelParams = ctrlParams[:params]
     for (pName, pVal) in pairs(paramsABC)
         pName ∈ ctrlParams[:fixPar] && continue
