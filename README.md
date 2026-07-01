@@ -1,22 +1,29 @@
 # CH Competition Mouse Models
 
-Julia codebase for simulating clonal hematopoiesis (CH) competition in mice. Models variant allele frequency evolution under selection using a stochastic (Moran process) approach, with inference via growth model fitting and ABC rejection sampling.
+Julia codebase for simulating clonal hematopoiesis (CH) competition in mice. Models variant allele frequency evolution under selection using a stochastic (Moran process) approach.
 
 ## Quick start
 
 ```julia
 include("src/competitiveSelection.jl")
 using .CompetitiveSelection
+
+params = (;
+    sType="gamma", η=0.1, σ=0.02, q=0.5,
+    N=1000, T=100, μ=2, τ=1.0,
+    growthModel="fixed size",
+)
+solEns, simArgs = evolvePopSim(params; runs=10)
 ```
 
-For simulation-only work (minimal dependencies):
+For simulation-only work (minimal dependency load):
 
 ```julia
 include("src/competitionSDE.jl")
 using .CompetitionSDE
 ```
 
-## Dependencies
+## Setup
 
 Dependencies are managed via `Project.toml`. After cloning:
 
@@ -24,19 +31,161 @@ Dependencies are managed via `Project.toml`. After cloning:
 julia -e 'import Pkg; Pkg.instantiate()'
 ```
 
-## Module structure
+Run the smoke test to verify:
+
+```bash
+julia test/runtests.jl
+```
+
+## Parameters
+
+Simulation parameters are passed as a `NamedTuple` to `evolvePopSim`.
+Required fields are marked with **req.** below; all others have defaults
+set by [`complete`](@ref).
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `sType` | `String` | **req.** | Selection distribution type (see below) |
+| `η` | `Float64` | **req.** | Mean selection coefficient |
+| `N` | `Int` | **req.** | Population size |
+| `T` | `Real` | **req.** | Simulation end time |
+| `μ` | `Real` | **req.** | Mutation rate (expected arrivals per generation) |
+| `τ` | `Real` | **req.** | Wild-type generation time |
+| `σ` | `Float64` | `0.0` | Std dev of fitness distribution (for gamma/gaussian) |
+| `q` | `Float64` | `0.0` | Double-hit mutation probability |
+| `growthModel` | `String` | `"fixed size"` | `"fixed size"` or `"unconstrained"` |
+| `tMature` | `Real` | `0.0` | Time to maturity (for prenatal growth phase) |
+| `sMax` | `Real` | `Inf` | Ceiling on per-variant selection coefficient draws |
+| `α` | `Float64` | `1/τ` | Cell division rate (inferred from τ if not given) |
+
+## Selection models
+
+The `sType` string selects how per-variant selection coefficients are
+drawn from a distribution with mean `η`.
+
+| `sType` value | Struct | Distribution |
+|---|---|---|
+| `"fixed"` | `FixedSelectionModel(η, q)` | All variants get coefficient `η` |
+| `"free"` | `FreeFixedModel(η, q)` | Identical to Fixed; used in fitting contexts |
+| `"gaussian"` | `GaussianSelectionModel(η, σ, q)` | `Normal(η, σ)` |
+| `"exponential"` | `ExponentialSelectionModel(η, q)` | `Exponential(η)` |
+| `"gamma"` | `GammaSelectionModel(η, σ, q)` | `Gamma(η²/σ², σ²/η)` |
+
+Each struct stores a `q` field — the probability that a new variant
+acquires a second hit on its parent's fitness (`0` disables).
+
+## Growth models
+
+| Growth model | Struct | Behaviour |
+|---|---|---|
+| `"fixed size"` | `FixedSizeGrowthModel` | Constant population size. Drift includes competition term `sᵢ - s̄`. Diffusion scales with `√(α(2 + sᵢ + s̄)x/N)`. |
+| `"unconstrained"` | `UnconstrainedGrowthModel` | Exponential growth. Drift is `α·sᵢ·x` (no competition). Diffusion scales with `√(α·x·(2 + sᵢ))`. |
+
+## Usage patterns
+
+### Basic simulation
+
+```julia
+params = (sType="gamma", η=0.1, σ=0.02, q=0.5, N=1000, T=100, μ=2, τ=1.0)
+solEns, simArgs = evolvePopSim(params; runs=50)
+```
+
+### With prenatal growth phase
+
+Set `tMature` to the age at maturity and pass `growthPhase=true`.
+Variants arising before `tMature` evolve under the unconstrained
+(exponential) model; after `tMature` the specified growth model applies.
+
+```julia
+params = (..., tMature=0.5)
+solEns, simArgs = evolvePopSim(params; runs=20, growthPhase=true)
+```
+
+### Tracked variants
+
+Pass birth times of specific variants to track their trajectories.
+Optionally include a fitness value `(t0, s)` instead of just the
+birth time `(t0,)`.
+
+```julia
+solEns, simArgs = evolvePopSim(params; runs=10, _trackerVariant=[(5.0, 0.2)])
+```
+
+### Changing the solver
+
+Available algorithms (see [`ALGS`](@ref)): `:LambaEM` (default),
+`:SOSRI2`, `:SOSRA2`, `:SRA3`, `:ImplicitEulerHeun`, `:SKenCarp`.
+
+```julia
+solEns, simArgs = evolvePopSim(params; runs=10, algorithm=:SOSRI2)
+```
+
+### Disabling diffusion
+
+```julia
+solEns, simArgs = evolvePopSim(params; runs=10, noDiffusion=true)
+```
+
+## Output
+
+`evolvePopSim` returns a tuple `(solEns, simArgs)`:
+
+- **`solEns::EnsembleSolution`** — one trajectory per run. Access the
+  `i`-th run with `solEns.u[i]`, or interpolate at time `t` with
+  `solEns[i](t)`.
+
+- **`simArgs::DataFrame`** — one row per run with columns:
+  `k` (variant count), `t₀_vid` (arrival times), `_trackerID`,
+  `s_vid` (selection coefficients), `init_vid`, `x₀_vid`, `parentId_vid`.
+
+## Module reference
 
 Three modules in a two-level hierarchy:
 
 | Module | File | Purpose |
 |---|---|---|
-| `CompetitiveSelection` | `competitiveSelection.jl` | Top-level convenience — re-exports both submodules |
-| ↳ `CompetitionSDE` | `competitionSDE.jl` | Simulation core: types, SDE engine, `evolvePopSim` |
-| ↳ `Scientist` | `Scientist.jl` | Analysis: binning, trajectory sampling, ABC distance metrics |
+| `CompetitiveSelection` | `competitiveSelection.jl` | Top-level convenience, re-exports both submodules |
+| ↳ `CompetitionSDE` | `competitionSDE.jl` | **Simulation core**: types, SDE engine, `evolvePopSim` |
+| ↳ `Scientist` | `Scientist.jl` | Analysis (binning, trajectory sampling, ABC) |
 
-`CompetitionSDE` is self-contained and can be used standalone. `Scientist` depends on `CompetitionSDE` and is loaded through the parent module.
+`CompetitionSDE` is self-contained and can be loaded standalone.
+`Scientist` depends on `CompetitionSDE` via `using ..CompetitionSDE`.
 
-Simulation code lives in `simEvolver.jl` (included by `CompetitionSDE`).
+### Source files
+
+| File | Included by | Contents |
+|---|---|---|
+| `competitionSDE.jl` | — | `CompetitionSDE` module: types, `complete()`, `ALGS` |
+| `simEvolver.jl` | `competitionSDE.jl` | `evolvePopSim`, `prepareSims`, drift/diffusion, selection dispatch |
+| `Scientist.jl` | `competitiveSelection.jl` | `Scientist` module: binning, sampling, ABC |
+
+### Key exports (CompetitionSDE)
+
+| Export | Kind | Description |
+|---|---|---|
+| `evolvePopSim` | function | Main simulation entry point |
+| `SimArgs` | struct | Per-simulation parameter bundle |
+| `GrowthModel` | abstract type | Supertype for growth models |
+| `SelectionModel` | abstract type | Supertype for selection distributions |
+| `FixedSizeGrowthModel` | struct | Constant-population growth |
+| `UnconstrainedGrowthModel` | struct | Exponential growth |
+| `GaussianSelectionModel` | struct | Normal-distributed fitness |
+| `ExponentialSelectionModel` | struct | Exponential-distributed fitness |
+| `GammaSelectionModel` | struct | Gamma-distributed fitness |
+| `FixedSelectionModel` | struct | Uniform fitness |
+| `FreeFixedModel` | struct | Uniform fitness (fitting context) |
+| `complete` | function | Fill parameter defaults |
+| `selectModel` | function | Construct model instances from strings |
+| `prepareSims` | function | Build SimArgs from parameters |
+
+## Testing
+
+```bash
+julia test/runtests.jl
+```
+
+Runs a short smoke test that loads the module, runs `evolvePopSim` with
+10 simulations, and asserts correct types and shapes.
 
 ## Attribution
 
