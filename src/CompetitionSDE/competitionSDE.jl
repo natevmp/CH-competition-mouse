@@ -76,7 +76,7 @@ function complete(params::NamedTuple)
     )
 end
 
-const ALGS = (LambaEM, SOSRI2, SOSRA2, SRA3, ImplicitEulerHeun, SKenCarp)
+const ALGS = (LambaEM=LambaEM, SOSRI2=SOSRI2, SOSRA2=SOSRA2, SRA3=SRA3, ImplicitEulerHeun=ImplicitEulerHeun, SKenCarp=SKenCarp)
 
 include("simEvolver.jl")
 

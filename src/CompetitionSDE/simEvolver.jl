@@ -203,15 +203,15 @@ function evolveGrowthPhase!(
     runs::Int,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
     noDiffusion::Bool=false,
-    algorithm::Int=1,
+    algorithm::Symbol=:LambaEM,
     ) where {U,S<:Real}
 
-    (; N, s, μ, α, tMature) = params
+    (; N, s, μ, α, tMature, sMax) = params
     T = 9/12 # full time is from conception until birth
 
     growthModel = UnconstrainedGrowthModel(selectionModel)
     f!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = 
-        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax=params.sMax)
+        drift(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t; sMax)
     g!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = begin
         noDiffusion ? 0 : diffusion(growthModel, dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t)
     end
@@ -294,7 +294,7 @@ function evolvePopSim(
         runs::Int=1,
         _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
         noDiffusion::Bool=false,
-        algorithm::Int=1,
+        algorithm::Symbol=:LambaEM,
         growthPhase::Bool=false,
     ) where {U,S<:Real}
     params = complete(params)
@@ -309,7 +309,7 @@ function evolvePopSim(
     runs::Int=1,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
     noDiffusion::Bool=false,
-    algorithm::Int=1,
+    algorithm::Symbol=:LambaEM,
     growthPhase::Bool=false,
     ) where {U,S<:Real}
     

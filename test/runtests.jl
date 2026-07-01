@@ -18,7 +18,7 @@ params = (;
     growthModel="fixed size",
 )
 
-solEns, simArgs = evolvePopSim(params; runs=10, algorithm=1);
+solEns, simArgs = evolvePopSim(params; runs=10, algorithm=:LambaEM);
 
 println("nSims: ", length(solEns.u))
 println("simArgs rows: ", nrow(simArgs))
@@ -31,7 +31,7 @@ println("PASSED: evolvePopSim returns correct types and shapes")
 
 println("\n=== smoke test: evolvePopSim with growthPhase ===")
 
-solEns2, simArgs2 = evolvePopSim(params; runs=5, growthPhase=true, algorithm=1)
+solEns2, simArgs2 = evolvePopSim(params; runs=5, growthPhase=true, algorithm=:LambaEM)
 
 println("nSims: ", length(solEns2.u))
 println("simArgs rows: ", nrow(simArgs2))
