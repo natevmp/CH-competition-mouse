@@ -45,18 +45,18 @@ set by [`complete`](@ref).
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `sType` | `String` | **req.** | Selection distribution type (see below) |
-| `η` | `Float64` | **req.** | Mean selection coefficient |
-| `N` | `Int` | **req.** | Population size |
+| `sType` | `String` | **req.** | Fitness distribution type (see below) |
+| `growthModel` | `String` | `"fixed size"` | `"fixed size"` or `"unconstrained"` population |
 | `T` | `Real` | **req.** | Simulation end time |
+| `η` | `Float64` | **req.** | Mean of fitness distribution |
+| `σ` | `Float64` | `0.0` | Std dev of fitness distribution (for gamma/gaussian) |
+| `N` | `Int` | **req.** | Population size |
 | `μ` | `Real` | **req.** | Mutation rate (expected arrivals per generation) |
 | `τ` | `Real` | **req.** | Wild-type generation time |
-| `σ` | `Float64` | `0.0` | Std dev of fitness distribution (for gamma/gaussian) |
+| `α` | `Float64` | `1/τ` | Wild-type division rate (inferred from τ if not given) |
 | `q` | `Float64` | `0.0` | Double-hit mutation probability |
-| `growthModel` | `String` | `"fixed size"` | `"fixed size"` or `"unconstrained"` |
 | `tMature` | `Real` | `0.0` | Time to maturity (for prenatal growth phase) |
 | `sMax` | `Real` | `Inf` | Ceiling on per-variant selection coefficient draws |
-| `α` | `Float64` | `1/τ` | Cell division rate (inferred from τ if not given) |
 
 ## Selection models
 
@@ -159,24 +159,14 @@ Three modules in a two-level hierarchy:
 | `simEvolver.jl` | `competitionSDE.jl` | `evolvePopSim`, `prepareSims`, drift/diffusion, selection dispatch |
 | `Scientist.jl` | `competitiveSelection.jl` | `Scientist` module: binning, sampling, ABC |
 
-### Key exports (CompetitionSDE)
+### Single exported function
 
-| Export | Kind | Description |
-|---|---|---|
-| `evolvePopSim` | function | Main simulation entry point |
-| `SimArgs` | struct | Per-simulation parameter bundle |
-| `GrowthModel` | abstract type | Supertype for growth models |
-| `SelectionModel` | abstract type | Supertype for selection distributions |
-| `FixedSizeGrowthModel` | struct | Constant-population growth |
-| `UnconstrainedGrowthModel` | struct | Exponential growth |
-| `GaussianSelectionModel` | struct | Normal-distributed fitness |
-| `ExponentialSelectionModel` | struct | Exponential-distributed fitness |
-| `GammaSelectionModel` | struct | Gamma-distributed fitness |
-| `FixedSelectionModel` | struct | Uniform fitness |
-| `FreeFixedModel` | struct | Uniform fitness (fitting context) |
-| `complete` | function | Fill parameter defaults |
-| `selectModel` | function | Construct model instances from strings |
-| `prepareSims` | function | Build SimArgs from parameters |
+| Export | Description |
+|---|---|
+| `evolvePopSim` | Main simulation entry point (see [Usage patterns](#usage-patterns)) |
+
+All types and internal functions are accessed through the submodule—e.g.
+`CompetitionSDE.SimArgs`, `CompetitionSDE.prepareSims`—for advanced use.
 
 ## Testing
 
