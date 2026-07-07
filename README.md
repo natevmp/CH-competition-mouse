@@ -104,11 +104,26 @@ solEns, simArgs = evolvePopSim(params; runs=20, growthPhase=true)
 ### Tracked variants
 
 Pass birth times of specific variants to track their trajectories.
-Optionally include a fitness value `(t0, s)` instead of just the
-birth time `(t0,)`.
+Provide as 1-element tuples `(t0,)` (just birth time, draws a random
+selection coefficient) or 2-element tuples `(t0, s)` (birth time with
+a user-specified selection coefficient).
+
+Multiple tracked variants can share the same birth time — each is
+assigned a unique index. The `_trackerID` column in the returned
+DataFrame gives the position of each tracked variant in the `t₀_vid`,
+`s_vid`, `x₀_vid`, etc. columns.
 
 ```julia
+# Single variant with a specified fitness
 solEns, simArgs = evolvePopSim(params; runs=10, _trackerVariant=[(5.0, 0.2)])
+# Multiple variants at the same time
+solEns, simArgs = evolvePopSim(params; runs=10, _trackerVariant=fill((0.001, 0.4), 5))
+# Birth time only (fitness drawn from distribution)
+solEns, simArgs = evolvePopSim(params; runs=10, _trackerVariant=[(0.5,), (10.0,)])
+
+# Access tracked variant trajectories
+ids = simArgs._trackerID[1]
+solEns.u[1](t)[ids]  # frequencies at time t
 ```
 
 ### Changing the solver
@@ -174,8 +189,9 @@ All types and internal functions are accessed through the submodule—e.g.
 julia test/runtests.jl
 ```
 
-Runs a short smoke test that loads the module, runs `evolvePopSim` with
-10 simulations, and asserts correct types and shapes.
+Runs smoke tests covering basic simulations, the prenatal growth phase,
+tracked variants (1- and 2-element tuples, same-time and distinct-time),
+and `_trackerID` correctness.
 
 ## Attribution
 
