@@ -164,6 +164,6 @@ const ALGS = (LambaEM=LambaEM, SOSRI2=SOSRI2, SOSRA2=SOSRA2, SRA3=SRA3, Implicit
 
 include("simEvolver.jl")
 
-export evolvePopSim
+export evolvePopSim 
 
 end

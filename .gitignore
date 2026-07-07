@@ -4,3 +4,5 @@
 /Manifest.toml
 .DS_Store
 debug.jld2
+
+Analysis/*

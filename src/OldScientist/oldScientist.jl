@@ -1,4 +1,4 @@
-module Scientist
+module OldScientist
 
 using ..CompetitionSDE
 using DifferentialEquations

@@ -13,7 +13,13 @@ Each entry corresponds to one simulation in the ensemble.
 - `parentId_vid` — parent of each clone
 - `s_vid` — per-variant selection coefficients
 """
-function prepareSims(params::NamedTuple, selectionModel, _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}, runs::Int; growthPhase::Bool=false) where {U,S<:Real}
+function prepareSims(
+    params::NamedTuple,
+    selectionModel::SelectionModel,
+    _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}},
+    runs::Int;
+    growthPhase::Bool=false
+    ) where {U,S<:Real}
     (; T, μ, N) = params
     tMature = params.tMature
 
@@ -39,7 +45,8 @@ function prepareSims(params::NamedTuple, selectionModel, _trackerVariant::Union{
         end
         sort!(t₀_vid_Sid[sid])
         for (i,ts) in enumerate(_trackerVariant)
-            _trackerID_Sid[sid][i] = findfirst(t₀_vid_Sid[sid] .== ts[1])
+            matches = findall(t₀_vid_Sid[sid] .== ts[1])
+            _trackerID_Sid[sid][i] = matches[i]
         end
     end
     s_vid_Sid = [drawSelectionCoefficients(selectionModel, k) for k in k_sid]
@@ -55,9 +62,9 @@ function prepareSims(params::NamedTuple, selectionModel, _trackerVariant::Union{
 
     simArgs = SimArgs(k_sid, t₀_vid_Sid, _trackerID_Sid, s_vid_Sid, init_vid_Sid, x₀_vid_Sid, parentId_vid_Sid)
 
-    if length(_trackerVariant)<1 return simArgs end
-    if eltype(_trackerVariant)==Tuple{Real} return simArgs end
-    # place tracked variants
+    # ---- tracked variants ----
+    if length(_trackerVariant)<1 return simArgs end # if there are no tracked variants
+    if fieldcount(eltype(_trackerVariant)) == 1 return simArgs end # if only the arrival times are specified
     for sid in eachindex(simArgs.s_vid_Sid)
         simArgs.s_vid_Sid[sid][simArgs._trackerID_Sid[sid]] .= [ts[2] for ts in _trackerVariant]
     end
@@ -70,7 +77,11 @@ end
 Draw events from a one-dimensional inhomogeneous Poisson process
 with intensity `λ(t)` using homogeneous thinning with rate `λHom`.
 """
-function drawInhomogeneousPoisson(λ::Function, λHom::Real, tWindow::Tuple{<:Real,<:Real})
+function drawInhomogeneousPoisson(
+    λ::Function,
+    λHom::Real,
+    tWindow::Tuple{<:Real,<:Real}
+    )
     t0 = tWindow[1]
     T = tWindow[end]
     mHom = rand(Poisson(λHom))
@@ -362,11 +373,12 @@ function evolvePopSim(
         noDiffusion::Bool=false,
         algorithm::Symbol=:LambaEM,
         growthPhase::Bool=false,
+        tSaves::Union{Int, Vector{<:Real}}=20,
     ) where {U,S<:Real}
     params = complete(params)
     (; sType, η, σ, q, growthModel) = params
     selectionModel, growthModel = selectModel(sType, η, σ, q, growthModel)
-    evolvePopSim(params, growthModel; runs, _trackerVariant, noDiffusion, algorithm, growthPhase)
+    evolvePopSim(params, growthModel; runs, _trackerVariant, noDiffusion, algorithm, growthPhase, tSaves)
 end
 
 """
@@ -380,11 +392,11 @@ function evolvePopSim(
     growthModel::GrowthModel; 
     runs::Int=1,
     _trackerVariant::Union{Vector{U},Vector{Tuple{U,S}}}=Vector{Float64}[],
+    tSaves::Union{Int, Vector{<:Real}}=20,
     noDiffusion::Bool=false,
     algorithm::Symbol=:LambaEM,
     growthPhase::Bool=false,
     ) where {U,S<:Real}
-    
     (; N, η, T, μ, α, tMature) = params
 
     f!(dx_vid, x_vid, (t0_vid, init_vid, α, s, N, parentId_vid), t) = 
@@ -399,8 +411,17 @@ function evolvePopSim(
         evolveGrowthPhase!(simArgs, params, growthModel.selection; runs, _trackerVariant, noDiffusion, algorithm)
     end
 
+    # # Pre-initialize tracked variants at t0 <= tMature so they are present
+    # # at the start of the const phase (the callback only fires for t0 > tMature).
+    # for sid in eachindex(simArgs._trackerID_Sid)
+    #     for idx in simArgs._trackerID_Sid[sid]
+    #         if !(simArgs.t₀_vid_Sid[sid][idx] <= tMature) continue end
+    #         simArgs.x₀_vid_Sid[sid][idx] = newCloneSize(growthModel, N)
+    #         simArgs.init_vid_Sid[sid][idx] = true
+    #     end
+    # end
+
     # Get first post-growth variant arrival time from all sims
-    # (allocation-free method)
     t0Min = tMature + 1.
     for t_vid in simArgs.t₀_vid_Sid
         if length(t_vid)==0 continue end # ingnore empty arrays (no variants occur)
@@ -412,14 +433,15 @@ function evolvePopSim(
     condt0(u,t,integrator) = t==t0Min
     function addStops!(integrator)
         for t0 in integrator.p[1]
-            if t0<tMature continue end # skip prenatal stops
+            if t0<=tMature continue end # skip prenatal stops
             add_tstop!(integrator, t0)
         end
     end
     callBackAddStops = DiscreteCallback(condt0, addStops!; save_positions=(false,false))
     function affect!(integrator)
-        i = findfirst(integrator.p[1].==integrator.t)
-        integrator.u[i] = newCloneSize(growthModel, integrator.p[5]) # set size of new variant
+        for i in findall(integrator.p[1].==integrator.t)
+            integrator.u[i] = newCloneSize(growthModel, integrator.p[5]) # set size of new variant
+        end
     end
     condition(u,t,integrator) = t ∈ integrator.p[1]
     callBackAddClone = DiscreteCallback(condition, affect!; save_positions=(false,false))
@@ -438,7 +460,18 @@ function evolvePopSim(
         remake(prob, u0=simArgs.x₀_vid_Sid[i], p=(simArgs.t₀_vid_Sid[i], simArgs.init_vid_Sid[i], α, simArgs.s_vid_Sid[i], N, simArgs.parentId_vid_Sid[i]))
     end
     ensembleProb = EnsembleProblem(prob, prob_func=probFunc)
-    _t = range(Int(ceil(tMature)), T)
+    # _t = range(Int(ceil(tMature)), T)
+    _t = getTimeSteps(tMature, T, tSaves)
+
     solEns = solve(ensembleProb, solver(), EnsembleThreads(); callback=callbacks, tstops=[t0Min,], saveat=_t, trajectories=runs)
     return solEns, DataFrame(simArgs)
+end
+
+function getTimeSteps(t0::Real, tF::Real, tSaves::Int)
+    return range(t0, tF, length=tSaves)
+end
+
+function getTimeSteps(t0::Real, tF::Real, tSaves::Vector{<:Real})
+    @assert issorted(tSaves) "tSaves must be monotonically increasing"
+    return filter(t -> t0 ≤ t ≤ tF, tSaves)
 end

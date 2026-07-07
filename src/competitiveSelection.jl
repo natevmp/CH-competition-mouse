@@ -1,10 +1,10 @@
 module CompetitiveSelection
 
 include("CompetitionSDE/competitionSDE.jl")
-include("Scientist/scientist.jl")
+include("OldScientist/oldScientist.jl")
 
 using .CompetitionSDE
-using .Scientist
+using .OldScientist
 
 export evolvePopSim
 
