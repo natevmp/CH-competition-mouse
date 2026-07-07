@@ -39,14 +39,16 @@ function prepareSims(
     end
     _trackerID_Sid = [Vector{Int}(undef, length(_trackerVariant)) for _ in eachindex(k_sid)]
     for sid in eachindex(k_sid)
+        nInitial = length(t₀_vid_Sid[sid])
         for ts in _trackerVariant
             k_sid[sid] += 1
             push!(t₀_vid_Sid[sid], ts[1])
         end
-        sort!(t₀_vid_Sid[sid])
-        for (i,ts) in enumerate(_trackerVariant)
-            matches = findall(t₀_vid_Sid[sid] .== ts[1])
-            _trackerID_Sid[sid][i] = matches[i]
+        perm = sortperm(t₀_vid_Sid[sid])  # perm[newPos] = oldPos
+        t₀_vid_Sid[sid] = t₀_vid_Sid[sid][perm]
+        for (i, _) in enumerate(_trackerVariant)
+            # Tracker i was at old index (nInitial + i); find its new sorted position
+            _trackerID_Sid[sid][i] = findfirst(==(nInitial + i), perm)
         end
     end
     s_vid_Sid = [drawSelectionCoefficients(selectionModel, k) for k in k_sid]
