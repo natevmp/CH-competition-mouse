@@ -145,9 +145,14 @@ function complete(params::NamedTuple)
     α = haskey(params, :α) ? params.α : 1.0 / params.τ
     return merge(
         (;
-            σ=0.0, q=0.0,
-            growthModel="fixed size", tMature=0.0,
-            α=α, sMax=Inf, sortBias=0.0,
+            σ=0.0,
+            q=0.0,
+            sType="gamma",
+            growthModel="fixed size",
+            tMature=0.0,
+            α=α,
+            sMax=Inf,
+            sortBias=0.0,
         ),
         params,
     )

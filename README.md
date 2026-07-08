@@ -128,7 +128,7 @@ solEns.u[1](t)[ids]  # frequencies at time t
 
 ### Changing the solver
 
-Available algorithms (see [`ALGS`](@ref)): `:LambaEM` (default),
+`evolvePopSim` uses `StochasticDiffEq` to solve the system of ODE's. See their [docs](https://docs.sciml.ai/DiffEqDocs/stable/solvers/sde_solve/) for solver information. Available algorithms (see [`ALGS`](@ref)): `:LambaEM` (default),
 `:SOSRI2`, `:SOSRA2`, `:SRA3`, `:ImplicitEulerHeun`, `:SKenCarp`.
 
 ```julia
