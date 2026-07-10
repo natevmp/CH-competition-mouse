@@ -413,16 +413,6 @@ function evolvePopSim(
         evolveGrowthPhase!(simArgs, params, growthModel.selection; runs, _trackerVariant, noDiffusion, algorithm)
     end
 
-    # # Pre-initialize tracked variants at t0 <= tMature so they are present
-    # # at the start of the const phase (the callback only fires for t0 > tMature).
-    # for sid in eachindex(simArgs._trackerID_Sid)
-    #     for idx in simArgs._trackerID_Sid[sid]
-    #         if !(simArgs.t₀_vid_Sid[sid][idx] <= tMature) continue end
-    #         simArgs.x₀_vid_Sid[sid][idx] = newCloneSize(growthModel, N)
-    #         simArgs.init_vid_Sid[sid][idx] = true
-    #     end
-    # end
-
     # Get first post-growth variant arrival time from all sims
     t0Min = tMature + 1.
     for t_vid in simArgs.t₀_vid_Sid
